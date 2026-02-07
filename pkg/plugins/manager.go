@@ -1,0 +1,18 @@
+package plugins
+
+import "fmt"
+
+func GetPlugin(name string) (ContentSource, error) {
+	switch name {
+	case "hn":
+		return NewHackerNewsSource(), nil
+	case "github":
+		return NewGitHubSource(), nil
+	default:
+		return nil, fmt.Errorf("unknown plugin: %s", name)
+	}
+}
+
+func ListPlugins() []string {
+	return []string{"hn", "github"}
+}
