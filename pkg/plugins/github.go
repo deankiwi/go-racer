@@ -58,27 +58,7 @@ func (g *GitHubSource) GetContent() (string, error) {
 	// to ensure it works reliably without hitting API rate limits or parsing issues.
 
 	snippets := []string{
-		`func (t Time) Add(d Duration) Time {
-	d += Duration(t.wall & nsecMask)
-	return t.addSec(int64(d / second), int32(d%second))
-}`,
-		`func (s *Scanner) Scan() bool {
-	if s.done {
-		return false
-	}
-	s.scanCalled = true
-	// Loop until we have a token.
-	for {
-		// See if we can get a token with what we already have.
-		if s.end > s.start || s.err != nil {
-			advance, token, err := s.split(s.buf[s.start:s.end], s.err != nil)
-            // ...
-        }
-    }
-}`,
-		`func HandleFunc(pattern string, handler func(ResponseWriter, *Request)) {
-	DefaultServeMux.HandleFunc(pattern, handler)
-}`,
+		`testing`,
 	}
 
 	return snippets[rand.Intn(len(snippets))], nil

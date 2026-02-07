@@ -9,28 +9,31 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"go-racer/pkg/config"
 	"go-racer/pkg/game"
 	"go-racer/pkg/plugins"
 )
 
 type Model struct {
-	Game      *game.TypingTest
-	Plugin    plugins.ContentSource
-	Err       error
-	IsLoading bool
-	Spinner   spinner.Model
-	Quitting  bool
+	Game              *game.TypingTest
+	Plugin            plugins.ContentSource
+	CurrentPluginName string
+	Err               error
+	IsLoading         bool
+	Spinner           spinner.Model
+	Quitting          bool
 }
 
-func InitialModel(plugin plugins.ContentSource) Model {
+func InitialModel(plugin plugins.ContentSource, pluginName string) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
 	return Model{
-		Plugin:    plugin,
-		IsLoading: true,
-		Spinner:   s,
+		Plugin:            plugin,
+		CurrentPluginName: pluginName,
+		IsLoading:         true,
+		Spinner:           s,
 	}
 }
 
@@ -54,7 +57,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.Game.IsComplete {
-			if msg.String() == "q" {
+			if msg.String() == "q" || msg.Type == tea.KeyEsc {
 				m.Quitting = true
 				return m, tea.Quit
 			}
@@ -65,11 +68,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.loadContent,
 				)
 			}
+			if msg.String() == "p" {
+				// Switch plugin
+				nextPlugin := "github"
+				if m.CurrentPluginName == "github" {
+					nextPlugin = "hn"
+				}
+
+				p, err := plugins.GetPlugin(nextPlugin)
+				if err != nil {
+					m.Err = err
+					return m, nil
+				}
+
+				m.Plugin = p
+				m.CurrentPluginName = nextPlugin
+				m.IsLoading = true
+
+				// Save config
+				cfg := &config.Config{LastPlugin: nextPlugin}
+				_ = config.Save(cfg)
+
+				return m, tea.Batch(
+					m.Spinner.Tick,
+					m.loadContent,
+				)
+			}
 			return m, nil
 		}
 
 		// Game logic input handling
 		switch msg.Type {
+		case tea.KeyEsc:
+			m.Game.Complete()
+			m.Game.CalculateStats()
 		case tea.KeyBackspace:
 			if msg.Alt {
 				m.Game.BackspaceWord()
@@ -166,7 +198,7 @@ func (m Model) renderGame() string {
 	}
 
 	s.WriteString("\n\n")
-	s.WriteString(UntypedStyle.Render("Start typing... Press Ctrl+C to quit"))
+	s.WriteString(UntypedStyle.Render("Start typing... Press Esc to finish, Ctrl+C to quit"))
 
 	return s.String()
 }
@@ -200,8 +232,9 @@ func (m Model) renderResults() string {
 		"WPM:      %.2f\n"+
 			"Accuracy: %.2f%%\n"+
 			"Time:     %.2fs\n\n"+
-			"Press 'r' to retry, 'q' to quit",
-		wpm, accuracy, duration.Seconds(),
+			"Press 'r' to retry, 'q' to quit\n"+
+			"Press 'p' to switch plugin (Current: %s)",
+		wpm, accuracy, duration.Seconds(), m.Plugin.Name(),
 	)
 
 	s.WriteString(content)

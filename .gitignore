@@ -1,0 +1,7 @@
+
+# Binaries
+main
+go-racer
+
+# Config
+.go-racer.json
