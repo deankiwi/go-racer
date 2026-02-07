@@ -6,20 +6,22 @@ import (
 
 // TypingTest represents the state of a typing session
 type TypingTest struct {
-	TargetText   string
-	UserInput    string
-	StartTime    time.Time
-	EndTime      time.Time
-	IsComplete   bool
-	IsStarted    bool
-	Errors       int
-	CorrectChars int
+	TargetText     string
+	UserInput      string
+	StartTime      time.Time
+	EndTime        time.Time
+	IsComplete     bool
+	IsStarted      bool
+	Errors         int
+	CorrectChars   int
+	InitialMistake map[int]bool // Tracks indices where the first attempt was incorrect
 }
 
 // NewTypingTest creates a new typing test with the given target text
 func NewTypingTest(text string) *TypingTest {
 	return &TypingTest{
-		TargetText: text,
+		TargetText:     text,
+		InitialMistake: make(map[int]bool),
 	}
 }
 
@@ -37,6 +39,18 @@ func (t *TypingTest) AddInput(r rune) {
 		return
 	}
 	t.Start()
+
+	index := len(t.UserInput)
+	// Track initial mistake if this is the first attempt at this index
+	if _, attempted := t.InitialMistake[index]; !attempted && index < len(t.TargetText) {
+		if byte(r) != t.TargetText[index] {
+			t.InitialMistake[index] = true
+		} else {
+			// Mark as attempted but correct (false)
+			t.InitialMistake[index] = false
+		}
+	}
+
 	t.UserInput += string(r)
 
 	// Check for completion
@@ -51,6 +65,31 @@ func (t *TypingTest) Backspace() {
 		return
 	}
 	t.UserInput = t.UserInput[:len(t.UserInput)-1]
+}
+
+// BackspaceWord removes the last word from user input
+func (t *TypingTest) BackspaceWord() {
+	if t.IsComplete || len(t.UserInput) == 0 {
+		return
+	}
+
+	// Convert to runes for safe handling
+	runes := []rune(t.UserInput)
+	if len(runes) == 0 {
+		return
+	}
+
+	// 1. Remove trailing spaces
+	for len(runes) > 0 && runes[len(runes)-1] == ' ' {
+		runes = runes[:len(runes)-1]
+	}
+
+	// 2. Remove characters until space or start
+	for len(runes) > 0 && runes[len(runes)-1] != ' ' {
+		runes = runes[:len(runes)-1]
+	}
+
+	t.UserInput = string(runes)
 }
 
 // Complete finishes the test and calculates final stats
@@ -106,10 +145,28 @@ func (t *TypingTest) WPM() float64 {
 	return (float64(len(t.UserInput)) / 5.0) / duration.Minutes()
 }
 
-// Accuracy calculates the percentage of correct characters
+// Accuracy calculates the percentage of characters correct on the first try
 func (t *TypingTest) Accuracy() float64 {
 	if len(t.UserInput) == 0 {
 		return 100
 	}
-	return float64(t.CorrectChars) / float64(len(t.UserInput)) * 100
+
+	totalMistakes := 0
+	for _, mistake := range t.InitialMistake {
+		if mistake {
+			totalMistakes++
+		}
+	}
+
+	// Based on total characters typed so far (up to length of target) or just total target length?
+	// User said "got it correct first time". Usually means compared to total text.
+	// Let's use the length of the text we've attempted so far.
+	// Actually, if we've typed N chars, we have N entries in InitialMistake (true or false).
+	// So len(InitialMistake) is the number of attempted indices.
+
+	if len(t.InitialMistake) == 0 {
+		return 100
+	}
+
+	return float64(len(t.InitialMistake)-totalMistakes) / float64(len(t.InitialMistake)) * 100
 }

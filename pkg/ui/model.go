@@ -71,7 +71,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Game logic input handling
 		switch msg.Type {
 		case tea.KeyBackspace:
-			m.Game.Backspace()
+			if msg.Alt {
+				m.Game.BackspaceWord()
+			} else {
+				m.Game.Backspace()
+			}
+		case tea.KeyCtrlW:
+			m.Game.BackspaceWord()
 		case tea.KeyRunes:
 			// Handle space as a rune
 			m.Game.AddInput(msg.Runes[0])
@@ -170,16 +176,37 @@ func (m Model) renderResults() string {
 	wpm := (float64(len(m.Game.UserInput)) / 5.0) / duration.Minutes()
 	accuracy := m.Game.Accuracy()
 
+	var s strings.Builder
+	s.WriteString(ResultsStyle.Render("Results"))
+	s.WriteString("\n\n")
+
+	// Render the text with historical accuracy colors
+	for i, char := range m.Game.TargetText {
+		var style lipgloss.Style
+		if mistyped, attempted := m.Game.InitialMistake[i]; attempted {
+			if mistyped {
+				style = ErrorStyle
+			} else {
+				style = CorrectStyle
+			}
+		} else {
+			style = UntypedStyle
+		}
+		s.WriteString(style.Render(string(char)))
+	}
+	s.WriteString("\n\n")
+
 	content := fmt.Sprintf(
-		"Results\n\n"+
-			"WPM:      %.2f\n"+
+		"WPM:      %.2f\n"+
 			"Accuracy: %.2f%%\n"+
 			"Time:     %.2fs\n\n"+
 			"Press 'r' to retry, 'q' to quit",
 		wpm, accuracy, duration.Seconds(),
 	)
 
-	return ResultsStyle.Render(content)
+	s.WriteString(content)
+
+	return ResultsStyle.Render(s.String())
 }
 
 // Messages
