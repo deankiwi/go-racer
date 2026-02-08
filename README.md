@@ -19,3 +19,11 @@ A CLI typing test tool written in Go.
 ```bash
 go run cmd/go-racer/main.go
 ```
+
+## User Configuration
+
+```~/.go-racer.json
+{
+  "last_plugin": "hn"
+}
+```

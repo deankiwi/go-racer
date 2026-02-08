@@ -2,8 +2,10 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
+	uni "unicode"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,9 +24,11 @@ type Model struct {
 	IsLoading         bool
 	Spinner           spinner.Model
 	Quitting          bool
+	Config            *config.Config
+	ShowMetrics       bool
 }
 
-func InitialModel(plugin plugins.ContentSource, pluginName string) Model {
+func InitialModel(plugin plugins.ContentSource, pluginName string, cfg *config.Config) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -34,6 +38,7 @@ func InitialModel(plugin plugins.ContentSource, pluginName string) Model {
 		CurrentPluginName: pluginName,
 		IsLoading:         true,
 		Spinner:           s,
+		Config:            cfg,
 	}
 }
 
@@ -68,6 +73,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.loadContent,
 				)
 			}
+			if msg.String() == "m" {
+				m.ShowMetrics = !m.ShowMetrics
+				return m, nil
+			}
+
+			if m.ShowMetrics {
+				if msg.String() == "esc" {
+					m.ShowMetrics = false
+					return m, nil
+				}
+				return m, nil
+			}
+
 			if msg.String() == "p" {
 				// Switch plugin
 				nextPlugin := "github"
@@ -86,8 +104,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.IsLoading = true
 
 				// Save config
-				cfg := &config.Config{LastPlugin: nextPlugin}
-				_ = config.Save(cfg)
+				m.Config.LastPlugin = nextPlugin
+				_ = config.Save(m.Config)
 
 				return m, tea.Batch(
 					m.Spinner.Tick,
@@ -102,6 +120,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyEsc:
 			m.Game.Complete()
 			m.Game.CalculateStats()
+			m.saveMetrics()
 		case tea.KeyBackspace:
 			if msg.Alt {
 				m.Game.BackspaceWord()
@@ -122,6 +141,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Game.Complete()
 			// Stats need to be calculated one last time to be sure
 			m.Game.CalculateStats()
+			m.saveMetrics()
 		}
 
 	case contentMsg:
@@ -163,6 +183,9 @@ func (m Model) View() string {
 	}
 
 	if m.Game.IsComplete {
+		if m.ShowMetrics {
+			return m.renderMetrics()
+		}
 		return m.renderResults()
 	}
 
@@ -233,6 +256,7 @@ func (m Model) renderResults() string {
 			"Accuracy: %.2f%%\n"+
 			"Time:     %.2fs\n\n"+
 			"Press 'r' to retry, 'q' to quit\n"+
+			"Press 'm' to view metrics\n"+
 			"Press 'p' to switch plugin (Current: %s)",
 		wpm, accuracy, duration.Seconds(), m.Plugin.Name(),
 	)
@@ -258,4 +282,100 @@ func (m Model) loadContent() tea.Msg {
 		return errorMsg{err}
 	}
 	return contentMsg{content}
+}
+
+func (m *Model) saveMetrics() {
+	if m.Config.Metrics == nil {
+		m.Config.Metrics = make(map[string]config.CharMetric)
+	}
+
+	sessionStats := m.Game.GetSessionStats()
+	for char, stat := range sessionStats {
+		existing := m.Config.Metrics[char]
+		existing.Attempts += stat.Attempts
+		existing.Mistakes += stat.Mistakes
+		m.Config.Metrics[char] = existing
+	}
+	_ = config.Save(m.Config)
+}
+
+func (m Model) renderMetrics() string {
+	var s strings.Builder
+	s.WriteString(ResultsStyle.Render("Character Metrics (Worst Accuracy First)"))
+	s.WriteString("\n\n")
+
+	type charStat struct {
+		Char     string
+		Attempts int
+		Mistakes int
+		Accuracy float64
+	}
+
+	// Map to aggregate stats by lowercase character
+	aggregatedStats := make(map[string]struct{ Attempts, Mistakes int })
+
+	for char, metric := range m.Config.Metrics {
+		runes := []rune(char)
+		if len(runes) != 1 {
+			continue
+		}
+		r := runes[0]
+
+		// Filter: Only allow ASCII letters (A-Z, a-z)
+		if r > uni.MaxASCII || !uni.IsLetter(r) {
+			continue
+		}
+
+		lowerChar := string(uni.ToLower(r))
+		s := aggregatedStats[lowerChar]
+		s.Attempts += metric.Attempts
+		s.Mistakes += metric.Mistakes
+		aggregatedStats[lowerChar] = s
+	}
+
+	var stats []charStat
+	for char, s := range aggregatedStats {
+		accuracy := 0.0
+		if s.Attempts > 0 {
+			accuracy = (float64(s.Attempts-s.Mistakes) / float64(s.Attempts)) * 100
+		}
+		stats = append(stats, charStat{
+			Char:     strings.ToUpper(char), // Display as Uppercase
+			Attempts: s.Attempts,
+			Mistakes: s.Mistakes,
+			Accuracy: accuracy,
+		})
+	}
+
+	sort.Slice(stats, func(i, j int) bool {
+		if stats[i].Accuracy != stats[j].Accuracy {
+			return stats[i].Accuracy < stats[j].Accuracy
+		}
+		if stats[i].Attempts != stats[j].Attempts {
+			return stats[i].Attempts > stats[j].Attempts
+		}
+		return stats[i].Char < stats[j].Char
+	})
+
+	// Header
+	s.WriteString(fmt.Sprintf("%-5s | %-10s | %-10s | %s\n", "Char", "Accuracy", "Mistakes", "Attempts"))
+	s.WriteString(strings.Repeat("-", 45) + "\n")
+
+	// Limit to top 20 or fit screen? Let's show top 15 for now
+	count := 0
+	for _, stat := range stats {
+		if count >= 15 {
+			break
+		}
+		displayChar := stat.Char
+		if displayChar == " " {
+			displayChar = "SPC"
+		}
+		s.WriteString(fmt.Sprintf("%-5s | %-9.1f%% | %-10d | %d\n", displayChar, stat.Accuracy, stat.Mistakes, stat.Attempts))
+		count++
+	}
+
+	s.WriteString("\nPress 'm' or 'Esc' to return\n")
+
+	return ResultsStyle.Render(s.String())
 }

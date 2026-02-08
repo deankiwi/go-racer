@@ -8,8 +8,14 @@ import (
 
 const configFileName = ".go-racer.json"
 
+type CharMetric struct {
+	Attempts int `json:"attempts"`
+	Mistakes int `json:"mistakes"`
+}
+
 type Config struct {
-	LastPlugin string `json:"last_plugin"`
+	LastPlugin string                `json:"last_plugin"`
+	Metrics    map[string]CharMetric `json:"metrics"`
 }
 
 func GetConfigPath() (string, error) {

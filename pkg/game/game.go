@@ -170,3 +170,22 @@ func (t *TypingTest) Accuracy() float64 {
 
 	return float64(len(t.InitialMistake)-totalMistakes) / float64(len(t.InitialMistake)) * 100
 }
+
+// GetSessionStats calculates character-level metrics for the current session
+func (t *TypingTest) GetSessionStats() map[string]struct{ Attempts, Mistakes int } {
+	stats := make(map[string]struct{ Attempts, Mistakes int })
+
+	for i, mistyped := range t.InitialMistake {
+		if i >= len(t.TargetText) {
+			continue
+		}
+		char := string(t.TargetText[i])
+		s := stats[char]
+		s.Attempts++
+		if mistyped {
+			s.Mistakes++
+		}
+		stats[char] = s
+	}
+	return stats
+}

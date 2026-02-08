@@ -36,7 +36,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	p := tea.NewProgram(ui.InitialModel(plugin, *pluginName))
+	p := tea.NewProgram(ui.InitialModel(plugin, *pluginName, cfg))
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error running program: %v\n", err)
 		os.Exit(1)
