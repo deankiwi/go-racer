@@ -21,7 +21,7 @@ func (g *GitHubSource) Description() string {
 }
 
 // For simplicity, let's fetch from the Go standard library examples or a specific repo
-func (g *GitHubSource) GetContent() (string, error) {
+func (g *GitHubSource) GetContent() (*Content, error) {
 	// Let's try to get a file from the Go repo
 	// This is a simplified approach. A real implementation might use the GitHub API to search for code.
 	// For now, let's just return a hardcoded slice of interesting Go snippets if API fails or to keep it simple without auth.
@@ -41,7 +41,7 @@ func (g *GitHubSource) GetContent() (string, error) {
 
 	resp, err := http.Get(url)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -61,7 +61,12 @@ func (g *GitHubSource) GetContent() (string, error) {
 		`testing`,
 	}
 
-	return snippets[rand.Intn(len(snippets))], nil
+	text := snippets[rand.Intn(len(snippets))]
+
+	return &Content{
+		Text:      text,
+		SourceURL: "https://github.com/golang/go", // Default fallback URL
+	}, nil
 }
 
 // Below is a scaffold for a real GitHub API implementation if we had a token

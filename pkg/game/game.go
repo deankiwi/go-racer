@@ -1,7 +1,10 @@
 package game
 
 import (
+	"go-racer/pkg/config"
+	"strings"
 	"time"
+	"unicode"
 )
 
 // TypingTest represents the state of a typing session
@@ -188,4 +191,42 @@ func (t *TypingTest) GetSessionStats() map[string]struct{ Attempts, Mistakes int
 		stats[char] = s
 	}
 	return stats
+}
+
+// ApplyFilters processes the input text based on the configuration
+func ApplyFilters(text string, cfg *config.Config) string {
+	var sb strings.Builder
+
+	for _, r := range text {
+		// Filter non-standard characters (non-ASCII)
+		if !cfg.IncludeNonStandardChars && r > unicode.MaxASCII {
+			continue
+		}
+
+		// Filter numbers
+		if !cfg.IncludeNumbers && unicode.IsNumber(r) {
+			continue
+		}
+
+		// Filter punctuation
+		if !cfg.IncludePunctuation && (unicode.IsPunct(r) || unicode.IsSymbol(r)) {
+			// Keep basic spaces
+			if !unicode.IsSpace(r) {
+				continue
+			}
+		}
+
+		// Handle capital letters (convert to lowercase if disabled)
+		if !cfg.IncludeCapitalLetters && unicode.IsUpper(r) {
+			r = unicode.ToLower(r)
+		}
+
+		sb.WriteRune(r)
+	}
+
+	// Clean up multiple spaces
+	result := sb.String()
+	result = strings.Join(strings.Fields(result), " ")
+
+	return result
 }

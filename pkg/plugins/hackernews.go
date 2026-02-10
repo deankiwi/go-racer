@@ -28,21 +28,21 @@ func (h *HackerNewsSource) Description() string {
 	return "Types out the titles of top Hacker News stories"
 }
 
-func (h *HackerNewsSource) GetContent() (string, error) {
+func (h *HackerNewsSource) GetContent() (*Content, error) {
 	// Fetch top stories
 	resp, err := http.Get("https://hacker-news.firebaseio.com/v0/topstories.json")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var storyIDs []int
 	if err := json.NewDecoder(resp.Body).Decode(&storyIDs); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if len(storyIDs) == 0 {
-		return "", fmt.Errorf("no stories found")
+		return nil, fmt.Errorf("no stories found")
 	}
 
 	// Get a random story ID from the top 50
@@ -54,20 +54,23 @@ func (h *HackerNewsSource) GetContent() (string, error) {
 	storyURL := fmt.Sprintf("https://hacker-news.firebaseio.com/v0/item/%d.json", storyID)
 	resp, err = http.Get(storyURL)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var story HNStory
 	if err := json.NewDecoder(resp.Body).Decode(&story); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if story.Title == "" {
-		return "", fmt.Errorf("story has no title")
+		return nil, fmt.Errorf("story has no title")
 	}
 
-	return story.Title, nil
+	return &Content{
+		Text:      story.Title,
+		SourceURL: story.URL,
+	}, nil
 }
 
 func min(a, b int) int {

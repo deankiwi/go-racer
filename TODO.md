@@ -1,5 +1,6 @@
 - [ ] bug: the metric pages is not working correctly
-- [ ] allow user to select if they want to turn off captial letters, numbers, and punctuation, non standard characters on a UK keyboard e.g "â"
+- [x] allow user to select if they want to turn off captial letters, numbers, and punctuation, non standard characters on a UK keyboard e.g "â"
+- [x] in the hacker news plugin, all the user after they have tpyed to work to click a link to see article
 - [ ] Add more plugins
     - [ ] offline plugins
     - [ ] obsidian plugin, or maybe just a markdown plugin
@@ -7,6 +8,6 @@
 -[ ] add more
 - [ ] allow plugins to have customization setting. example github plugin could have a setting to select which repo you look at
 - [ ] remove tabs and replace with spaces
-- [ ] add a new metric page that shows the user's progress over time showing data, words per minute, accuracy, and time, maybe a graph?
+- [ ] add a new metric page that shows the user's progress over time showing data, words per minute, accuracy, and time, maybe a in terminal?
 - [ ] make sure someone can easily download this from the internet and run it in there terminal without any setup. I think setting a alias or something run run the game would be a good idea
 

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -26,6 +27,8 @@ type Model struct {
 	Quitting          bool
 	Config            *config.Config
 	ShowMetrics       bool
+	ShowSettings      bool
+	CurrentContent    *plugins.Content
 }
 
 func InitialModel(plugin plugins.ContentSource, pluginName string, cfg *config.Config) Model {
@@ -62,6 +65,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.Game.IsComplete {
+			if m.ShowSettings {
+				switch msg.String() {
+				case "esc", ",":
+					m.ShowSettings = false
+				case "n":
+					m.Config.IncludeNumbers = !m.Config.IncludeNumbers
+					_ = config.Save(m.Config)
+				case "p":
+					m.Config.IncludePunctuation = !m.Config.IncludePunctuation
+					_ = config.Save(m.Config)
+				case "c":
+					m.Config.IncludeCapitalLetters = !m.Config.IncludeCapitalLetters
+					_ = config.Save(m.Config)
+				case "s":
+					m.Config.IncludeNonStandardChars = !m.Config.IncludeNonStandardChars
+					_ = config.Save(m.Config)
+				}
+				return m, nil
+			}
+
 			if msg.String() == "q" || msg.Type == tea.KeyEsc {
 				m.Quitting = true
 				return m, tea.Quit
@@ -72,6 +95,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.Spinner.Tick,
 					m.loadContent,
 				)
+			}
+			if msg.String() == "," {
+				m.ShowSettings = !m.ShowSettings
+				return m, nil
 			}
 			if msg.String() == "m" {
 				m.ShowMetrics = !m.ShowMetrics
@@ -112,6 +139,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.loadContent,
 				)
 			}
+
+			if msg.Type == tea.KeyEnter {
+				if m.CurrentContent != nil && m.CurrentContent.SourceURL != "" {
+					// Open URL
+					return m, tea.ExecProcess(exec.Command("open", m.CurrentContent.SourceURL), func(err error) tea.Msg {
+						if err != nil {
+							return errorMsg{err}
+						}
+						return nil
+					})
+				}
+			}
+
 			return m, nil
 		}
 
@@ -146,7 +186,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case contentMsg:
 		m.IsLoading = false
-		m.Game = game.NewTypingTest(msg.content)
+		m.Game = game.NewTypingTest(msg.content.Text)
+		m.CurrentContent = msg.content
 		m.Game.Start() // Start timer immediately on load? Or wait for first keypress?
 		// Let's modify game to start on first input in a future iteration if needed.
 		// For now, let's just start a timer but only count "active" time?
@@ -183,6 +224,9 @@ func (m Model) View() string {
 	}
 
 	if m.Game.IsComplete {
+		if m.ShowSettings {
+			return m.renderSettings()
+		}
 		if m.ShowMetrics {
 			return m.renderMetrics()
 		}
@@ -257,18 +301,46 @@ func (m Model) renderResults() string {
 			"Time:     %.2fs\n\n"+
 			"Press 'r' to retry, 'q' to quit\n"+
 			"Press 'm' to view metrics\n"+
+			"Press ',' for settings\n"+
 			"Press 'p' to switch plugin (Current: %s)",
 		wpm, accuracy, duration.Seconds(), m.Plugin.Name(),
 	)
+
+	if m.CurrentContent != nil && m.CurrentContent.SourceURL != "" {
+		content += "\nPress 'Enter' to open source"
+	}
 
 	s.WriteString(content)
 
 	return ResultsStyle.Render(s.String())
 }
 
+func (m Model) renderSettings() string {
+	var s strings.Builder
+	s.WriteString(ResultsStyle.Render("Settings"))
+	s.WriteString("\n\n")
+
+	checkbox := func(label string, checked bool, key string) string {
+		check := "[ ]"
+		if checked {
+			check = "[x]"
+		}
+		return fmt.Sprintf("%s %-25s (%s)\n", check, label, key)
+	}
+
+	s.WriteString(checkbox("Include Numbers", m.Config.IncludeNumbers, "n"))
+	s.WriteString(checkbox("Include Punctuation", m.Config.IncludePunctuation, "p"))
+	s.WriteString(checkbox("Include Capital Letters", m.Config.IncludeCapitalLetters, "c"))
+	s.WriteString(checkbox("Include Non-Standard", m.Config.IncludeNonStandardChars, "s"))
+
+	s.WriteString("\nPress ',' or 'Esc' to return\n")
+
+	return ResultsStyle.Render(s.String())
+}
+
 // Messages
 type contentMsg struct {
-	content string
+	content *plugins.Content
 }
 
 type errorMsg struct {
@@ -281,6 +353,7 @@ func (m Model) loadContent() tea.Msg {
 	if err != nil {
 		return errorMsg{err}
 	}
+	content.Text = game.ApplyFilters(content.Text, m.Config)
 	return contentMsg{content}
 }
 
@@ -322,9 +395,9 @@ func (m Model) renderMetrics() string {
 		r := runes[0]
 
 		// Filter: Only allow ASCII letters (A-Z, a-z)
-		if r > uni.MaxASCII || !uni.IsLetter(r) {
-			continue
-		}
+		// if r > uni.MaxASCII || !uni.IsLetter(r) {
+		// 	continue
+		// }
 
 		lowerChar := string(uni.ToLower(r))
 		s := aggregatedStats[lowerChar]

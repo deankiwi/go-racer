@@ -14,8 +14,12 @@ type CharMetric struct {
 }
 
 type Config struct {
-	LastPlugin string                `json:"last_plugin"`
-	Metrics    map[string]CharMetric `json:"metrics"`
+	LastPlugin              string                `json:"last_plugin"`
+	Metrics                 map[string]CharMetric `json:"metrics"`
+	IncludeNumbers          bool                  `json:"include_numbers"`
+	IncludePunctuation      bool                  `json:"include_punctuation"`
+	IncludeCapitalLetters   bool                  `json:"include_capital_letters"`
+	IncludeNonStandardChars bool                  `json:"include_non_standard_chars"`
 }
 
 func GetConfigPath() (string, error) {
@@ -34,7 +38,13 @@ func Load() (*Config, error) {
 
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		return &Config{LastPlugin: "hn"}, nil // Default
+		return &Config{
+			LastPlugin:              "hn",
+			IncludeNumbers:          true,
+			IncludePunctuation:      true,
+			IncludeCapitalLetters:   true,
+			IncludeNonStandardChars: true,
+		}, nil // Default
 	}
 	if err != nil {
 		return nil, err
