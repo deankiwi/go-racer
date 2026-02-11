@@ -8,11 +8,13 @@ func GetPlugin(name string) (ContentSource, error) {
 		return NewHackerNewsSource(), nil
 	case "github":
 		return NewGitHubSource(), nil
+	case "spanish-news":
+		return NewSpanishNewsSource(), nil
 	default:
 		return nil, fmt.Errorf("unknown plugin: %s", name)
 	}
 }
 
 func ListPlugins() []string {
-	return []string{"hn", "github"}
+	return []string{"hn", "github", "spanish-news"}
 }

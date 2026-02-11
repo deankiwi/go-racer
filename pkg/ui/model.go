@@ -12,6 +12,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/muesli/reflow/wordwrap"
+
 	"go-racer/pkg/config"
 	"go-racer/pkg/game"
 	"go-racer/pkg/plugins"
@@ -29,6 +31,8 @@ type Model struct {
 	ShowMetrics       bool
 	ShowSettings      bool
 	CurrentContent    *plugins.Content
+	width             int
+	height            int
 }
 
 func InitialModel(plugin plugins.ContentSource, pluginName string, cfg *config.Config) Model {
@@ -54,6 +58,11 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
+
 	case tea.KeyMsg:
 		if msg.Type == tea.KeyCtrlC {
 			m.Quitting = true
@@ -243,6 +252,7 @@ func (m Model) renderGame() string {
 	s.WriteString("\n\n")
 
 	// Render text with highlighting
+	var textBuilder strings.Builder
 	for i, char := range m.Game.TargetText {
 		var style lipgloss.Style
 
@@ -261,8 +271,20 @@ func (m Model) renderGame() string {
 			style = style.Copy().Underline(true)
 		}
 
-		s.WriteString(style.Render(string(char)))
+		textBuilder.WriteString(style.Render(string(char)))
 	}
+
+	// Apply word wrap
+	width := m.width - 4 // Account for some padding
+	if width < 20 {
+		// Fallback if width is not yet set or too small
+		if m.width == 0 {
+			width = 60 // Default width if unknown
+		} else {
+			width = 20
+		}
+	}
+	s.WriteString(wordwrap.String(textBuilder.String(), width))
 
 	s.WriteString("\n\n")
 	s.WriteString(UntypedStyle.Render("Start typing... Press Esc to finish, Ctrl+C to quit"))
@@ -280,6 +302,7 @@ func (m Model) renderResults() string {
 	s.WriteString("\n\n")
 
 	// Render the text with historical accuracy colors
+	var textBuilder strings.Builder
 	for i, char := range m.Game.TargetText {
 		var style lipgloss.Style
 		if mistyped, attempted := m.Game.InitialMistake[i]; attempted {
@@ -291,8 +314,19 @@ func (m Model) renderResults() string {
 		} else {
 			style = UntypedStyle
 		}
-		s.WriteString(style.Render(string(char)))
+		textBuilder.WriteString(style.Render(string(char)))
 	}
+
+	// Apply word wrap
+	width := m.width - 8 // Account for border (2) + padding (4) + extra safety (2)
+	if width < 20 {
+		if m.width == 0 {
+			width = 60
+		} else {
+			width = 20
+		}
+	}
+	s.WriteString(wordwrap.String(textBuilder.String(), width))
 	s.WriteString("\n\n")
 
 	content := fmt.Sprintf(

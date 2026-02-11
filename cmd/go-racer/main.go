@@ -20,7 +20,7 @@ func main() {
 		cfg = &config.Config{LastPlugin: "hn"}
 	}
 
-	pluginName := flag.String("plugin", cfg.LastPlugin, "Plugin source to use (hn, github)")
+	pluginName := flag.String("plugin", cfg.LastPlugin, "Plugin source to use (hn, github, spanish-news)")
 	flag.Parse()
 
 	// Update config with the selected plugin (whether from flag or default)
