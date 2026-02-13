@@ -30,6 +30,7 @@ type Model struct {
 	Config            *config.Config
 	ShowMetrics       bool
 	ShowSettings      bool
+	ShowTrend         bool
 	CurrentContent    *plugins.Content
 	width             int
 	height            int
@@ -117,6 +118,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.ShowMetrics {
 				if msg.String() == "esc" {
 					m.ShowMetrics = false
+					return m, nil
+				}
+				return m, nil
+			}
+
+			if msg.String() == "t" {
+				m.ShowTrend = !m.ShowTrend
+				return m, nil
+			}
+
+			if m.ShowTrend {
+				if msg.String() == "esc" {
+					m.ShowTrend = false
 					return m, nil
 				}
 				return m, nil
@@ -239,6 +253,9 @@ func (m Model) View() string {
 		if m.ShowMetrics {
 			return m.renderMetrics()
 		}
+		if m.ShowTrend {
+			return m.renderTrend()
+		}
 		return m.renderResults()
 	}
 
@@ -336,7 +353,8 @@ func (m Model) renderResults() string {
 			"Press 'r' to retry, 'q' to quit\n"+
 			"Press 'm' to view metrics\n"+
 			"Press ',' for settings\n"+
-			"Press 'p' to switch plugin (Current: %s)",
+			"Press 'p' to switch plugin (Current: %s)\n"+
+			"Press 't' to view trend",
 		wpm, accuracy, duration.Seconds(), m.Plugin.Name(),
 	)
 
@@ -401,8 +419,18 @@ func (m *Model) saveMetrics() {
 		existing := m.Config.Metrics[char]
 		existing.Attempts += stat.Attempts
 		existing.Mistakes += stat.Mistakes
+		existing.Mistakes += stat.Mistakes
 		m.Config.Metrics[char] = existing
 	}
+
+	// Save history
+	result := config.GameResult{
+		WPM:       m.Game.WPM(),
+		Accuracy:  m.Game.Accuracy(),
+		Timestamp: time.Now().Unix(),
+	}
+	m.Config.History = append(m.Config.History, result)
+
 	_ = config.Save(m.Config)
 }
 
@@ -483,6 +511,100 @@ func (m Model) renderMetrics() string {
 	}
 
 	s.WriteString("\nPress 'm' or 'Esc' to return\n")
+
+	return ResultsStyle.Render(s.String())
+}
+
+func (m Model) renderTrend() string {
+	var s strings.Builder
+	s.WriteString(ResultsStyle.Render("WPM Trend (Last 20 Games)"))
+	s.WriteString("\n\n")
+
+	history := m.Config.History
+	if len(history) == 0 {
+		s.WriteString("No games played yet.")
+		return ResultsStyle.Render(s.String())
+	}
+
+	// Limit to last 20 games
+	startIdx := 0
+	if len(history) > 20 {
+		startIdx = len(history) - 20
+	}
+	recentHistory := history[startIdx:]
+
+	if len(recentHistory) < 2 {
+		s.WriteString(fmt.Sprintf("Not enough data to show trend (Played: %d)\n", len(history)))
+		s.WriteString("\nPress 't' or 'Esc' to return\n")
+		return ResultsStyle.Render(s.String())
+	}
+
+	// Find min and max WPM for scaling
+	minWPM := recentHistory[0].WPM
+	maxWPM := recentHistory[0].WPM
+	for _, res := range recentHistory {
+		if res.WPM < minWPM {
+			minWPM = res.WPM
+		}
+		if res.WPM > maxWPM {
+			maxWPM = res.WPM
+		}
+	}
+
+	// Add some padding to Y axis
+	minWPM = minWPM * 0.9
+	maxWPM = maxWPM * 1.1
+	if minWPM < 0 {
+		minWPM = 0
+	}
+
+	graphHeight := 10
+	graphWidth := 60
+	if m.width > 20 {
+		graphWidth = m.width - 20
+	}
+
+	// Create grid
+	grid := make([][]string, graphHeight)
+	for i := range grid {
+		grid[i] = make([]string, graphWidth)
+		for j := range grid[i] {
+			grid[i][j] = " "
+		}
+	}
+
+	// Plot points
+	for i, res := range recentHistory {
+		// Map x (index) to grid width
+		// spread points evenly
+		x := int(float64(i) / float64(len(recentHistory)-1) * float64(graphWidth-1))
+
+		// Map y (WPM) to grid height
+		// Y is inverted in grid (0 is top)
+		normalizedWPM := (res.WPM - minWPM) / (maxWPM - minWPM)
+		y := int((1.0 - normalizedWPM) * float64(graphHeight-1))
+
+		if y >= 0 && y < graphHeight && x >= 0 && x < graphWidth {
+			grid[y][x] = "•"
+		}
+	}
+
+	// Render grid with Y axis labels
+	for i, row := range grid {
+		// Calculate WPM for this row
+		rowWPM := maxWPM - (float64(i)/float64(graphHeight-1))*(maxWPM-minWPM)
+		s.WriteString(fmt.Sprintf("%6.1f |", rowWPM))
+		for _, cell := range row {
+			s.WriteString(cell)
+		}
+		s.WriteString("\n")
+	}
+
+	// X axis
+	s.WriteString("       " + strings.Repeat("-", graphWidth) + "\n")
+	s.WriteString(fmt.Sprintf("       %-*s%s\n", graphWidth/2, "Oldest", "Newest"))
+
+	s.WriteString("\nPress 't' or 'Esc' to return\n")
 
 	return ResultsStyle.Render(s.String())
 }

@@ -13,9 +13,16 @@ type CharMetric struct {
 	Mistakes int `json:"mistakes"`
 }
 
+type GameResult struct {
+	WPM       float64 `json:"wpm"`
+	Accuracy  float64 `json:"accuracy"`
+	Timestamp int64   `json:"timestamp"`
+}
+
 type Config struct {
 	LastPlugin              string                `json:"last_plugin"`
 	Metrics                 map[string]CharMetric `json:"metrics"`
+	History                 []GameResult          `json:"history"`
 	IncludeNumbers          bool                  `json:"include_numbers"`
 	IncludePunctuation      bool                  `json:"include_punctuation"`
 	IncludeCapitalLetters   bool                  `json:"include_capital_letters"`
