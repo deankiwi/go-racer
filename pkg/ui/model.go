@@ -95,6 +95,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
+			if m.ShowMetrics {
+				if msg.String() == "esc" || msg.Type == tea.KeyEsc || msg.String() == "m" {
+					m.ShowMetrics = false
+				}
+				return m, nil
+			}
+
+			if m.ShowTrend {
+				if msg.String() == "esc" || msg.Type == tea.KeyEsc || msg.String() == "t" {
+					m.ShowTrend = false
+				}
+				return m, nil
+			}
+
 			if msg.String() == "q" || msg.Type == tea.KeyEsc {
 				m.Quitting = true
 				return m, tea.Quit
@@ -107,32 +121,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				)
 			}
 			if msg.String() == "," {
-				m.ShowSettings = !m.ShowSettings
+				m.ShowSettings = true
 				return m, nil
 			}
 			if msg.String() == "m" {
-				m.ShowMetrics = !m.ShowMetrics
+				m.ShowMetrics = true
 				return m, nil
 			}
-
-			if m.ShowMetrics {
-				if msg.String() == "esc" {
-					m.ShowMetrics = false
-					return m, nil
-				}
-				return m, nil
-			}
-
 			if msg.String() == "t" {
-				m.ShowTrend = !m.ShowTrend
-				return m, nil
-			}
-
-			if m.ShowTrend {
-				if msg.String() == "esc" {
-					m.ShowTrend = false
-					return m, nil
-				}
+				m.ShowTrend = true
 				return m, nil
 			}
 
