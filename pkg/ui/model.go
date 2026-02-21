@@ -31,6 +31,8 @@ type Model struct {
 	ShowMetrics       bool
 	ShowSettings      bool
 	ShowTrend         bool
+	ShowPluginSelect  bool
+	PluginSelectIdx   int
 	CurrentContent    *plugins.Content
 	width             int
 	height            int
@@ -109,6 +111,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
+			if m.ShowPluginSelect {
+				availablePlugins := plugins.ListPlugins()
+				switch {
+				case msg.String() == "esc" || msg.Type == tea.KeyEsc:
+					m.ShowPluginSelect = false
+				case msg.String() == "up" || msg.String() == "k":
+					m.PluginSelectIdx--
+					if m.PluginSelectIdx < 0 {
+						m.PluginSelectIdx = len(availablePlugins) - 1
+					}
+				case msg.String() == "down" || msg.String() == "j":
+					m.PluginSelectIdx++
+					if m.PluginSelectIdx >= len(availablePlugins) {
+						m.PluginSelectIdx = 0
+					}
+				case msg.Type == tea.KeyEnter:
+					nextPlugin := availablePlugins[m.PluginSelectIdx]
+					p, err := plugins.GetPlugin(nextPlugin)
+					if err != nil {
+						m.Err = err
+						m.ShowPluginSelect = false
+						return m, nil
+					}
+
+					m.Plugin = p
+					m.CurrentPluginName = nextPlugin
+					m.IsLoading = true
+					m.ShowPluginSelect = false
+
+					// Save config
+					m.Config.LastPlugin = nextPlugin
+					_ = config.Save(m.Config)
+
+					return m, tea.Batch(
+						m.Spinner.Tick,
+						m.loadContent,
+					)
+				}
+				return m, nil
+			}
+
 			if msg.String() == "q" || msg.Type == tea.KeyEsc {
 				m.Quitting = true
 				return m, tea.Quit
@@ -134,30 +177,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if msg.String() == "p" {
-				// Switch plugin
-				nextPlugin := "github"
-				if m.CurrentPluginName == "github" {
-					nextPlugin = "hn"
+				m.ShowPluginSelect = true
+				m.PluginSelectIdx = 0
+				for i, pName := range plugins.ListPlugins() {
+					if pName == m.CurrentPluginName {
+						m.PluginSelectIdx = i
+						break
+					}
 				}
-
-				p, err := plugins.GetPlugin(nextPlugin)
-				if err != nil {
-					m.Err = err
-					return m, nil
-				}
-
-				m.Plugin = p
-				m.CurrentPluginName = nextPlugin
-				m.IsLoading = true
-
-				// Save config
-				m.Config.LastPlugin = nextPlugin
-				_ = config.Save(m.Config)
-
-				return m, tea.Batch(
-					m.Spinner.Tick,
-					m.loadContent,
-				)
+				return m, nil
 			}
 
 			if msg.Type == tea.KeyEnter {
@@ -252,6 +280,9 @@ func (m Model) View() string {
 		}
 		if m.ShowTrend {
 			return m.renderTrend()
+		}
+		if m.ShowPluginSelect {
+			return m.renderPluginSelect()
 		}
 		return m.renderResults()
 	}
@@ -350,8 +381,9 @@ func (m Model) renderResults() string {
 			"Press 'r' to retry, 'q' to quit\n"+
 			"Press 'm' to view metrics\n"+
 			"Press ',' for settings\n"+
-			"Press 'p' to switch plugin (Current: %s)\n"+
-			"Press 't' to view trend",
+			"Press 'p' to select plugin\n"+
+			"Press 't' to view trend\n"+
+			"Current Plugin: %s",
 		wpm, accuracy, duration.Seconds(), m.Plugin.Name(),
 	)
 
@@ -453,10 +485,21 @@ func (m Model) renderMetrics() string {
 		}
 		r := runes[0]
 
-		// Filter: Only allow ASCII letters (A-Z, a-z)
-		// if r > uni.MaxASCII || !uni.IsLetter(r) {
-		// 	continue
-		// }
+		// Filter invisible or empty characters, keeping standard space
+		if uni.IsControl(r) || (uni.IsSpace(r) && r != ' ') {
+			continue
+		}
+
+		// Filter by user settings
+		if !m.Config.IncludeNonStandardChars && r > uni.MaxASCII {
+			continue
+		}
+		if !m.Config.IncludeNumbers && uni.IsNumber(r) {
+			continue
+		}
+		if !m.Config.IncludePunctuation && (uni.IsPunct(r) || uni.IsSymbol(r)) {
+			continue
+		}
 
 		lowerChar := string(uni.ToLower(r))
 		s := aggregatedStats[lowerChar]
@@ -471,8 +514,14 @@ func (m Model) renderMetrics() string {
 		if s.Attempts > 0 {
 			accuracy = (float64(s.Attempts-s.Mistakes) / float64(s.Attempts)) * 100
 		}
+
+		displayChar := strings.ToUpper(char)
+		if !m.Config.IncludeCapitalLetters {
+			displayChar = string(uni.ToLower([]rune(char)[0]))
+		}
+
 		stats = append(stats, charStat{
-			Char:     strings.ToUpper(char), // Display as Uppercase
+			Char:     displayChar,
 			Attempts: s.Attempts,
 			Mistakes: s.Mistakes,
 			Accuracy: accuracy,
@@ -602,6 +651,24 @@ func (m Model) renderTrend() string {
 	s.WriteString(fmt.Sprintf("       %-*s%s\n", graphWidth/2, "Oldest", "Newest"))
 
 	s.WriteString("\nPress 't' or 'Esc' to return\n")
+
+	return ResultsStyle.Render(s.String())
+}
+
+func (m Model) renderPluginSelect() string {
+	var s strings.Builder
+	s.WriteString(ResultsStyle.Render("Select Plugin"))
+	s.WriteString("\n\n")
+
+	for i, pName := range plugins.ListPlugins() {
+		cursor := "  "
+		if m.PluginSelectIdx == i {
+			cursor = "> "
+		}
+		s.WriteString(fmt.Sprintf("%s%s\n", cursor, pName))
+	}
+
+	s.WriteString("\nPress 'Enter' to select, 'Esc' to return\n")
 
 	return ResultsStyle.Render(s.String())
 }
