@@ -1,6 +1,8 @@
 package plugins
 
 import (
+	"encoding/json"
+	"fmt"
 	"math/rand"
 	"net/http"
 	"time"
@@ -17,60 +19,68 @@ func (g *GitHubSource) Name() string {
 }
 
 func (g *GitHubSource) Description() string {
-	return "Types out random Go snippets from the standard library"
+	return "Types out trending repositories and their descriptions"
 }
 
-// For simplicity, let's fetch from the Go standard library examples or a specific repo
+type GitHubSearchResponse struct {
+	Items []struct {
+		FullName    string `json:"full_name"`
+		Description string `json:"description"`
+		HTMLURL     string `json:"html_url"`
+	} `json:"items"`
+}
+
 func (g *GitHubSource) GetContent() (*Content, error) {
-	// Let's try to get a file from the Go repo
-	// This is a simplified approach. A real implementation might use the GitHub API to search for code.
-	// For now, let's just return a hardcoded slice of interesting Go snippets if API fails or to keep it simple without auth.
+	// Fetch trending repositories created in the last 7 days
+	// We use the search API to get the top 50 most starred repositories
+	sevenDaysAgo := time.Now().AddDate(0, 0, -7).Format("2006-01-02")
+	url := fmt.Sprintf("https://api.github.com/search/repositories?q=created:>%s&sort=stars&order=desc&per_page=50", sevenDaysAgo)
 
-	// Actually, let's try to fetch a specific file content from raw.githubusercontent.com
-	// We can pick from a list of known interesting files.
+	// Create a custom client with a short timeout
+	client := &http.Client{Timeout: 10 * time.Second}
 
-	files := []string{
-		"https://raw.githubusercontent.com/golang/go/master/src/fmt/print.go",
-		"https://raw.githubusercontent.com/golang/go/master/src/time/time.go",
-		"https://raw.githubusercontent.com/golang/go/master/src/strings/strings.go",
-		"https://raw.githubusercontent.com/golang/go/master/src/net/http/server.go",
+	// GitHub API requires a User-Agent header
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
 	}
+	req.Header.Set("User-Agent", "go-racer-terminal-app")
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	rand.Seed(time.Now().UnixNano())
-	url := files[rand.Intn(len(files))]
-
-	resp, err := http.Get(url)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	// Read a chunk of the file
-	// We don't want the whole file, just a function or a block.
-	// This is tricky without a parser.
-	// Let's read the first 500 bytes and find a complete line?
-	// Or maybe just grab a random function from a predefined set of snippets for stability.
-
-	// For a better experience without complex parsing, let's use a curated list of snippets for now,
-	// checking if we can fetch them. If not, we fall back to hardcoded ones.
-
-	// Let's implement a simple "random snippet from memory" for this proof of concept
-	// to ensure it works reliably without hitting API rate limits or parsing issues.
-
-	snippets := []string{
-		`testing`,
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status: %d", resp.StatusCode)
 	}
 
-	text := snippets[rand.Intn(len(snippets))]
+	var searchResp GitHubSearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&searchResp); err != nil {
+		return nil, err
+	}
+
+	if len(searchResp.Items) == 0 {
+		return nil, fmt.Errorf("no repositories found")
+	}
+
+	// Pick a random repository from the top 50
+	rand.Seed(time.Now().UnixNano())
+	repo := searchResp.Items[rand.Intn(len(searchResp.Items))]
+
+	// Handle cases where description might be missing
+	desc := repo.Description
+	if desc == "" {
+		desc = "No description provided."
+	}
+
+	// Format the text to type out
+	text := fmt.Sprintf("%s\n\n%s", repo.FullName, desc)
 
 	return &Content{
 		Text:      text,
-		SourceURL: "https://github.com/golang/go", // Default fallback URL
+		SourceURL: repo.HTMLURL,
 	}, nil
-}
-
-// Below is a scaffold for a real GitHub API implementation if we had a token
-type GitHubContent struct {
-	Content  string `json:"content"`
-	Encoding string `json:"encoding"`
 }
