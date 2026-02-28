@@ -73,9 +73,4 @@ func (h *HackerNewsSource) GetContent() (*Content, error) {
 	}, nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
+
