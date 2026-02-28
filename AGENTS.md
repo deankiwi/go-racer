@@ -10,7 +10,7 @@ This document outlines the usage and context for AI agents (LLMs) working on thi
 - `pkg/`: Contains the core logic organized by domain:
   - `config/`: Handles loading and saving user configurations and metrics.
   - `game/`: The core typing test mechanics and state.
-  - `plugins/`: Different text sources for the typing test (e.g., Hacker News, Wikipedia).
+  - `plugins/`: Different text sources for the typing test (e.g., Hacker News, GitHub), and a `random` plugin to select among them.
   - `ui/`: Terminal UI components built with bubbletea and lipgloss.
 - `doc/`: Documentation files.
 - `AGENTS.md`: This guide.

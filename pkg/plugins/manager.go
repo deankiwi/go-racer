@@ -10,11 +10,13 @@ func GetPlugin(name string) (ContentSource, error) {
 		return NewGitHubSource(), nil
 	case "spanish-news":
 		return NewSpanishNewsSource(), nil
+	case "random":
+		return NewRandomSource(), nil
 	default:
 		return nil, fmt.Errorf("unknown plugin: %s", name)
 	}
 }
 
 func ListPlugins() []string {
-	return []string{"hn", "github", "spanish-news"}
+	return []string{"hn", "github", "spanish-news", "random"}
 }
